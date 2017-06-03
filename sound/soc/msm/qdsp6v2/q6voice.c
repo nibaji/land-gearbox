@@ -1,4 +1,7 @@
-/*  Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+/*  
+ * sound/soc/msm/qdsp6v2/q6voice.c
+ * 
+ * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -27,6 +30,9 @@
 #include <sound/audio_cal_utils.h>
 #include "q6voice.h"
 #include <sound/adsp_err.h>
+#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+#include <linux/input/doubletap2wake.h>
+#endif
 
 #define TIMEOUT_MS 300
 
@@ -5847,6 +5853,10 @@ int voc_end_voice_call(uint32_t session_id)
 
 		ret = -EINVAL;
 	}
+	
+	#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	in_phone_call = false;
+	#endif
 
 	mutex_unlock(&v->lock);
 	return ret;
@@ -6169,6 +6179,9 @@ int voc_start_voice_call(uint32_t session_id)
 		ret = -EINVAL;
 		goto fail;
 	}
+	#ifdef CONFIG_TOUCHSCREEN_DOUBLETAP2WAKE
+	in_phone_call = true;
+	#endif
 fail:
 	mutex_unlock(&v->lock);
 	return ret;

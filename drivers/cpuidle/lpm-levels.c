@@ -1316,11 +1316,16 @@ static int lpm_probe(struct platform_device *pdev)
 	int ret;
 	int size;
 	struct kobject *module_kobj = NULL;
+<<<<<<< HEAD
+=======
+
+>>>>>>> f4e086914e3c26bf1504aa1b6903ed18770eb8f7
 	get_online_cpus();
 	lpm_root_node = lpm_of_parse_cluster(pdev);
 
 	if (IS_ERR_OR_NULL(lpm_root_node)) {
 		pr_err("%s(): Failed to probe low power modes\n", __func__);
+		put_online_cpus();
 		return PTR_ERR(lpm_root_node);
 	}
 
@@ -1342,7 +1347,11 @@ static int lpm_probe(struct platform_device *pdev)
 	ret = remote_spin_lock_init(&scm_handoff_lock, SCM_HANDOFF_LOCK_ID);
 	if (ret) {
 		pr_err("%s: Failed initializing scm_handoff_lock (%d)\n",
+<<<<<<< HEAD
 		       __func__, ret);
+=======
+			__func__, ret);
+>>>>>>> f4e086914e3c26bf1504aa1b6903ed18770eb8f7
 		put_online_cpus();
 		return ret;
 	}
@@ -1359,7 +1368,7 @@ static int lpm_probe(struct platform_device *pdev)
 				__func__);
 		goto failed;
 	}
-
+	register_hotcpu_notifier(&lpm_cpu_nblk);
 	module_kobj = kset_find_obj(module_kset, KBUILD_MODNAME);
 	if (!module_kobj) {
 		pr_err("%s: cannot find kobject for module %s\n",

@@ -3154,8 +3154,13 @@ static int sd_resume(struct device *dev)
 	struct scsi_disk *sdkp = scsi_disk_get_from_dev(dev);
 	int ret = 0;
 
+<<<<<<< HEAD
 	if (!sdkp)	/* E.g.: runtime resume at the start of sd_probe() */
 		return 0;
+=======
+	if (!sdkp)
+		return 0;	/* this can happen */
+>>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
 
 	if (!sdkp->device->manage_start_stop)
 		goto done;

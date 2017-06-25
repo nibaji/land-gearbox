@@ -1256,8 +1256,13 @@ static void mmc_wait_data_done(struct mmc_request *mrq)
 	struct mmc_context_info *context_info = &mrq->host->context_info;
 
 	spin_lock_irqsave(&context_info->lock, flags);
+<<<<<<< HEAD
 	context_info->is_done_rcv = true;
 	wake_up_interruptible(&context_info->wait);
+=======
+	mrq->host->context_info.is_done_rcv = true;
+	wake_up_interruptible(&mrq->host->context_info.wait);
+>>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
 	spin_unlock_irqrestore(&context_info->lock, flags);
 }
 
@@ -1479,6 +1484,12 @@ EXPORT_SYMBOL(mmc_cmdq_post_req);
 int mmc_cmdq_halt(struct mmc_host *host, bool halt)
 {
 	int err = 0;
+
+	if (mmc_host_cq_disable(host)) {
+		pr_debug("%s: %s: CQE is already disabled\n",
+				mmc_hostname(host), __func__);
+		return 0;
+	}
 
 	if ((halt && mmc_host_halt(host)) ||
 			(!halt && !mmc_host_halt(host))) {
@@ -1805,12 +1816,21 @@ int mmc_read_bkops_status(struct mmc_card *card)
 		goto out;
 
 	card->ext_csd.raw_bkops_status = ext_csd[EXT_CSD_BKOPS_STATUS] &
+<<<<<<< HEAD
 			MMC_BKOPS_URGENCY_MASK;
 	card->ext_csd.raw_exception_status =
 			ext_csd[EXT_CSD_EXP_EVENTS_STATUS] & (EXT_CSD_URGENT_BKOPS |
 					EXT_CSD_DYNCAP_NEEDED |
 					EXT_CSD_SYSPOOL_EXHAUSTED
 					| EXT_CSD_PACKED_FAILURE);
+=======
+		MMC_BKOPS_URGENCY_MASK;
+	card->ext_csd.raw_exception_status =
+		ext_csd[EXT_CSD_EXP_EVENTS_STATUS] & (EXT_CSD_URGENT_BKOPS |
+						      EXT_CSD_DYNCAP_NEEDED |
+						      EXT_CSD_SYSPOOL_EXHAUSTED
+						      | EXT_CSD_PACKED_FAILURE);
+>>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
 out:
 	kfree(ext_csd);
 	return err;
@@ -1899,9 +1919,11 @@ void mmc_set_data_timeout(struct mmc_data *data, const struct mmc_card *card)
 	 * Address this by setting the read timeout to a "reasonably high"
 	 * value. For the cards tested, 300ms has proven enough. If necessary,
 	 * this value can be increased if other problematic cards require this.
+	 * Certain Hynix 5.x cards giving read timeout even with 300ms.
+	 * Increasing further to max value (4s).
 	 */
 	if (mmc_card_long_read_time(card) && data->flags & MMC_DATA_READ) {
-		data->timeout_ns = 300000000;
+		data->timeout_ns = 4000000000u;
 		data->timeout_clks = 0;
 	}
 
@@ -2038,6 +2060,10 @@ void mmc_get_card(struct mmc_card *card)
 {
 	pm_runtime_get_sync(&card->dev);
 	mmc_claim_host(card->host);
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+	if (mmc_bus_needs_resume(card->host))
+		mmc_resume_bus(card->host);
+#endif
 }
 EXPORT_SYMBOL(mmc_get_card);
 
@@ -2176,30 +2202,6 @@ void mmc_set_ungated(struct mmc_host *host)
 {
 }
 #endif
-
-int mmc_execute_tuning(struct mmc_card *card)
-{
-	struct mmc_host *host = card->host;
-	u32 opcode;
-	int err;
-
-	if (!host->ops->execute_tuning)
-		return 0;
-
-	if (mmc_card_mmc(card))
-		opcode = MMC_SEND_TUNING_BLOCK_HS200;
-	else
-		opcode = MMC_SEND_TUNING_BLOCK;
-
-	mmc_host_clk_hold(host);
-	err = host->ops->execute_tuning(host, opcode);
-	mmc_host_clk_release(host);
-
-	if (err)
-		pr_err("%s: tuning execution failed\n", mmc_hostname(host));
-
-	return err;
-}
 
 /*
  * Change the bus mode (open drain/push-pull) of a host.
@@ -2787,6 +2789,40 @@ static inline void mmc_bus_put(struct mmc_host *host)
 		__mmc_release_bus(host);
 	spin_unlock_irqrestore(&host->lock, flags);
 }
+
+int mmc_resume_bus(struct mmc_host *host)
+{
+	unsigned long flags;
+	int err = 0;
+
+	if (!mmc_bus_needs_resume(host))
+		return -EINVAL;
+
+	pr_debug("%s: Starting deferred resume\n", mmc_hostname(host));
+	spin_lock_irqsave(&host->lock, flags);
+	host->bus_resume_flags &= ~MMC_BUSRESUME_NEEDS_RESUME;
+	spin_unlock_irqrestore(&host->lock, flags);
+
+	mmc_bus_get(host);
+	if (host->bus_ops && !host->bus_dead && host->card) {
+		mmc_power_up(host, host->card->ocr);
+		BUG_ON(!host->bus_ops->resume);
+		host->bus_ops->resume(host);
+		if (mmc_card_cmdq(host->card)) {
+			err = mmc_cmdq_halt(host, false);
+			if (err)
+				pr_err("%s: %s: unhalt failed: %d\n",
+				       mmc_hostname(host), __func__, err);
+			else
+				mmc_card_clr_suspended(host->card);
+		}
+	}
+
+	mmc_bus_put(host);
+	pr_debug("%s: Deferred resume completed\n", mmc_hostname(host));
+	return 0;
+}
+EXPORT_SYMBOL(mmc_resume_bus);
 
 /*
  * Assign a mmc bus handler to a host. Only one bus handler may control a
@@ -3741,6 +3777,7 @@ EXPORT_SYMBOL(mmc_detect_card_removed);
 
 void mmc_rescan(struct work_struct *work)
 {
+	unsigned long flags;
 	struct mmc_host *host =
 		container_of(work, struct mmc_host, detect.work);
 
@@ -3749,8 +3786,12 @@ void mmc_rescan(struct work_struct *work)
 		host->trigger_card_event = false;
 	}
 
-	if (host->rescan_disable)
+	spin_lock_irqsave(&host->lock, flags);
+	if (host->rescan_disable) {
+		spin_unlock_irqrestore(&host->lock, flags);
 		return;
+	}
+	spin_unlock_irqrestore(&host->lock, flags);
 
 	/* If there is a non-removable card registered, only scan once */
 	if ((host->caps & MMC_CAP_NONREMOVABLE) && host->rescan_entered)
@@ -4021,6 +4062,10 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 
 		spin_lock_irqsave(&host->lock, flags);
 		host->rescan_disable = 0;
+		if (mmc_bus_manual_resume(host)) {
+			spin_unlock_irqrestore(&host->lock, flags);
+			break;
+		}
 		spin_unlock_irqrestore(&host->lock, flags);
 		_mmc_detect_change(host, 0, false);
 

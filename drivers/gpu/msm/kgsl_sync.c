@@ -1,5 +1,8 @@
 /* Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+<<<<<<< HEAD
  * Copyright (C) 2016 XiaoMi, Inc.
+=======
+>>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -481,7 +484,10 @@ long kgsl_ioctl_syncsource_create(struct kgsl_device_private *dev_priv,
 	idr_preload(GFP_KERNEL);
 	spin_lock(&private->syncsource_lock);
 	id = idr_alloc(&private->syncsource_idr, syncsource, 1, 0, GFP_NOWAIT);
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
 	if (id > 0) {
 		syncsource->id = id;
 		param->id = id;

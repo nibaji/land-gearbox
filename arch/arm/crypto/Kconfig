@@ -26,6 +26,17 @@ config CRYPTO_SHA1_ARM_NEON
 	  SHA-1 secure hash standard (FIPS 180-1/DFIPS 180-2) implemented
 	  using optimized ARM NEON assembly, when NEON instructions are
 	  available.
+<<<<<<< HEAD
+=======
+config CRYPTO_SHA2_ARM_CE
+	tristate "SHA-224/256 digest algorithm (ARM v8 Crypto Extensions)"
+	depends on KERNEL_MODE_NEON
+	select CRYPTO_SHA256
+	select CRYPTO_HASH
+	help
+	  SHA-256 secure hash standard (DFIPS 180-2) implemented
+	  using special ARMv8 Crypto Extensions.
+>>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
 
 config CRYPTO_SHA256_ARM
 	tristate "SHA-224/256 digest algorithm (ARM-asm and NEON)"

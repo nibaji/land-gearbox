@@ -34,7 +34,10 @@
 #include <linux/bitops.h>
 #include <linux/rcupdate.h>
 #include <linux/preempt.h>		/* in_interrupt() */
+<<<<<<< HEAD
 
+=======
+>>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
 
 /*
  * The height_to_maxindex array needs to be one deeper than the maximum

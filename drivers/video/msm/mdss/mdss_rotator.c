@@ -1,4 +1,4 @@
-/* Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -375,7 +375,7 @@ static bool mdss_rotator_is_work_pending(struct mdss_rot_mgr *mgr,
 
 static int mdss_rotator_create_fence(struct mdss_rot_entry *entry)
 {
-	int ret, fd;
+	int ret = 0, fd;
 	u32 val;
 	struct sync_pt *sync_pt;
 	struct sync_fence *fence;
@@ -746,7 +746,8 @@ static struct mdss_rot_hw_resource *mdss_rotator_hw_alloc(
 		goto error;
 
 	pipe_ndx = mdata->dma_pipes[pipe_id].ndx;
-	hw->pipe = mdss_mdp_pipe_assign(mdata, hw->mixer, pipe_ndx);
+	hw->pipe = mdss_mdp_pipe_assign(mdata, hw->mixer,
+			pipe_ndx, MDSS_MDP_PIPE_RECT0);
 	if (IS_ERR_OR_NULL(hw->pipe)) {
 		pr_err("dma pipe allocation failed\n");
 		ret = -ENODEV;
@@ -1033,8 +1034,16 @@ static int mdss_rotator_calc_perf(struct mdss_rot_perf *perf)
 		pr_err("invalid output format\n");
 		return -EINVAL;
 	}
+	if (!config->input.width ||
+		(0xffffffff/config->input.width < config->input.height))
+		return -EINVAL;
 
 	perf->clk_rate = config->input.width * config->input.height;
+
+	if (!perf->clk_rate ||
+		(0xffffffff/perf->clk_rate < config->frame_rate))
+		return -EINVAL;
+
 	perf->clk_rate *= config->frame_rate;
 	/* rotator processes 4 pixels per clock */
 	perf->clk_rate /= 4;
@@ -1701,11 +1710,13 @@ static int mdss_rotator_config_hw(struct mdss_rot_hw_resource *hw,
 {
 	struct mdss_mdp_pipe *pipe;
 	struct mdp_rotation_item *item;
+	struct mdss_rot_perf *perf;
 	int ret;
 
 	ATRACE_BEGIN(__func__);
 	pipe = hw->pipe;
 	item = &entry->item;
+	perf = entry->perf;
 
 	pipe->flags = mdss_rotator_translate_flags(item->flags);
 	pipe->src_fmt = mdss_mdp_get_format_params(item->input.format);
@@ -1713,7 +1724,8 @@ static int mdss_rotator_config_hw(struct mdss_rot_hw_resource *hw,
 	pipe->img_height = item->input.height;
 	mdss_rotator_translate_rect(&pipe->src, &item->src_rect);
 	mdss_rotator_translate_rect(&pipe->dst, &item->src_rect);
-	pipe->scale.enable_pxl_ext = 0;
+	pipe->scaler.enable = 0;
+	pipe->frame_rate = perf->config.frame_rate;
 
 	pipe->params_changed++;
 
@@ -2055,10 +2067,12 @@ static int mdss_rotator_config_session(struct mdss_rot_mgr *mgr,
 		return ret;
 	}
 
+	mutex_lock(&mgr->lock);
 	perf = mdss_rotator_find_session(private, config.session_id);
 	if (!perf) {
 		pr_err("No session with id=%u could be found\n",
 			config.session_id);
+		mutex_unlock(&mgr->lock);
 		return -EINVAL;
 	}
 
@@ -2081,6 +2095,7 @@ static int mdss_rotator_config_session(struct mdss_rot_mgr *mgr,
 		config.output.format);
 done:
 	ATRACE_END(__func__);
+	mutex_unlock(&mgr->lock);
 	return ret;
 }
 
@@ -2143,6 +2158,7 @@ static int mdss_rotator_handle_request(struct mdss_rot_mgr *mgr,
 	struct mdp_rotation_item *items = NULL;
 	struct mdss_rot_entry_container *req = NULL;
 	int size, ret;
+	uint32_t req_count;
 
 	if (mdss_get_sd_client_cnt()) {
 		pr_err("rot request not permitted during secure display session\n");
@@ -2156,12 +2172,18 @@ static int mdss_rotator_handle_request(struct mdss_rot_mgr *mgr,
 		return ret;
 	}
 
+	req_count = user_req.count;
+	if ((!req_count) || (req_count > MAX_LAYER_COUNT)) {
+		pr_err("invalid rotator req count :%d\n", req_count);
+		return -EINVAL;
+	}
+
 	/*
 	 * here, we make a copy of the items so that we can copy
 	 * all the output fences to the client in one call.   Otherwise,
 	 * we will have to call multiple copy_to_user
 	 */
-	size = sizeof(struct mdp_rotation_item) * user_req.count;
+	size = sizeof(struct mdp_rotation_item) * req_count;
 	items = devm_kzalloc(&mgr->pdev->dev, size, GFP_KERNEL);
 	if (!items) {
 		pr_err("fail to allocate rotation items\n");
@@ -2300,6 +2322,7 @@ static int mdss_rotator_handle_request32(struct mdss_rot_mgr *mgr,
 	struct mdp_rotation_item *items = NULL;
 	struct mdss_rot_entry_container *req = NULL;
 	int size, ret;
+	uint32_t req_count;
 
 	if (mdss_get_sd_client_cnt()) {
 		pr_err("rot request not permitted during secure display session\n");
@@ -2313,7 +2336,13 @@ static int mdss_rotator_handle_request32(struct mdss_rot_mgr *mgr,
 		return ret;
 	}
 
-	size = sizeof(struct mdp_rotation_item) * user_req32.count;
+	req_count = user_req32.count;
+	if ((!req_count) || (req_count > MAX_LAYER_COUNT)) {
+		pr_err("invalid rotator req count :%d\n", req_count);
+		return -EINVAL;
+	}
+
+	size = sizeof(struct mdp_rotation_item) * req_count;
 	items = devm_kzalloc(&mgr->pdev->dev, size, GFP_KERNEL);
 	if (!items) {
 		pr_err("fail to allocate rotation items\n");
@@ -2504,6 +2533,7 @@ static const struct file_operations mdss_rotator_fops = {
 static int mdss_rotator_parse_dt_bus(struct mdss_rot_mgr *mgr,
 	struct platform_device *dev)
 {
+	struct device_node *node;
 	int ret = 0, i;
 	bool register_bus_needed;
 	int usecases;
@@ -2521,12 +2551,26 @@ static int mdss_rotator_parse_dt_bus(struct mdss_rot_mgr *mgr,
 	register_bus_needed = of_property_read_bool(dev->dev.of_node,
 		"qcom,mdss-has-reg-bus");
 	if (register_bus_needed) {
-		mgr->reg_bus.bus_scale_pdata = &rot_reg_bus_scale_table;
-		usecases = mgr->reg_bus.bus_scale_pdata->num_usecases;
-		for (i = 0; i < usecases; i++) {
-			rot_reg_bus_usecases[i].num_paths = 1;
-			rot_reg_bus_usecases[i].vectors =
-				&rot_reg_bus_vectors[i];
+		node = of_get_child_by_name(
+			    dev->dev.of_node, "qcom,mdss-rot-reg-bus");
+		if (!node) {
+			mgr->reg_bus.bus_scale_pdata = &rot_reg_bus_scale_table;
+			usecases = mgr->reg_bus.bus_scale_pdata->num_usecases;
+			for (i = 0; i < usecases; i++) {
+				rot_reg_bus_usecases[i].num_paths = 1;
+				rot_reg_bus_usecases[i].vectors =
+					&rot_reg_bus_vectors[i];
+			}
+		} else {
+			mgr->reg_bus.bus_scale_pdata =
+				msm_bus_pdata_from_node(dev, node);
+			if (IS_ERR_OR_NULL(mgr->reg_bus.bus_scale_pdata)) {
+				ret = PTR_ERR(mgr->reg_bus.bus_scale_pdata);
+				if (!ret)
+					ret = -EINVAL;
+				pr_err("reg_rot_bus failed rc=%d\n", ret);
+				mgr->reg_bus.bus_scale_pdata = NULL;
+			}
 		}
 	}
 	return ret;

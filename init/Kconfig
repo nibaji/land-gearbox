@@ -1164,8 +1164,6 @@ config SCHED_HMP
 	  in their instructions per-cycle capability or the maximum
 	  frequency they can attain.
 
-<<<<<<< HEAD
-=======
 config SCHED_HMP_CSTATE_AWARE
 	bool "CPU C-state aware scheduler"
 	depends on SCHED_HMP
@@ -1174,7 +1172,7 @@ config SCHED_HMP_CSTATE_AWARE
 	  with CPUs C-state. If this is enabled, scheduler places tasks
 	  onto the shallowest C-state CPU among the most power efficient CPUs.
 
->>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
+
 config SCHED_CORE_CTL
 	bool "QTI Core Control"
 	depends on SMP

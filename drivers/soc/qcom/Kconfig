@@ -826,7 +826,6 @@ config MSM_REMOTEQDSS
 	  enable/disable these events. Interface located in
 	  /sys/class/remoteqdss.
 
-<<<<<<< HEAD
 config CPUMAXFREQ
 	bool "Enable CPUMAXFREQ Proc Interface"
 	help
@@ -842,13 +841,13 @@ config SECBOOT_FUSE
 	help
 	   Provide a interface for reading CPU secure boot fuse setting. Interface located in
 	   /proc/secboot_fuse_reg
-=======
+
 config QCOM_SMCINVOKE
 	bool "Secure QSEE Support"
 	help
 	  Enable SMCInvoke driver which supports capability based secure
 	  communication between QSEE and HLOS.
->>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
+
 
 source "drivers/soc/qcom/memshare/Kconfig"
 #patch, jiangtao.wt, 20160311, performance patch from qcom

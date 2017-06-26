@@ -63,18 +63,12 @@ static ssize_t fuse_shortcircuit_read_write_iter(struct kiocb *iocb,
 	struct file *fuse_file, *lower_file;
 	struct inode *fuse_inode, *lower_inode;
 	struct fuse_conn *fc;
-<<<<<<< HEAD
-=======
 
->>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
 	ff = iocb->ki_filp->private_data;
 	fuse_file = iocb->ki_filp;
 	lower_file = ff->rw_lower_file;
 	fc = ff->fc;
-<<<<<<< HEAD
-=======
 
->>>>>>> 3065243ab749aed10978dec3c6165fe8a2a7f135
 	/* lock lower file to prevent it from being released */
 	get_file(lower_file);
 	iocb->ki_filp = lower_file;
